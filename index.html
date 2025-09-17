@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Labirin Sederhana</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --wall-color: #333;
+            --floor-color: #2a2a2a;
+            --player-color: #00aaff;
+            --start-color: #4caf50;
+            --finish-color: #f44336;
+            --text-color: #f0f0f0;
+            --flash-color: #ffffff;
+        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        #game-container { position: relative; width: 800px; max-width: 100%; aspect-ratio: 4 / 3; }
+        canvas { width: 100%; height: 100%; background-color: var(--floor-color); image-rendering: pixelated; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 10; padding: 20px; box-sizing: border-box; }
+        .hidden { display: none; }
+        button { background-color: var(--player-color); color: var(--bg-color); border: none; padding: 12px 24px; font-size: 1.2em; font-weight: bold; cursor: pointer; border-radius: 5px; transition: transform 0.2s; margin-top: 20px; }
+        button:hover { transform: scale(1.05); }
+        .checkbox-container { margin: 20px 0; display: flex; align-items: center; cursor: pointer; }
+        .warning { color: #ffcc00; font-size: 0.9em; max-width: 400px; }
+                #jumpscare-overlay { 
+            position: fixed; /* Mengambil alih posisi dari .overlay */
+            top: 0;
+            left: 0;
+            width: 100vw; /* Lebar penuh viewport */
+            height: 100vh; /* Tinggi penuh viewport */
+            background-color: transparent; 
+            z-index: 100; 
+        }
+        #jumpscare-content { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; opacity: 0; }
+        #jumpscare-image { width: 100%; height: 100%; object-fit: cover; transform: scale(0.5); }
+        #jumpscare-buttons { position: absolute; bottom: 50px; opacity: 0; transition: opacity 1s 2s; }
+        .jumpscare-active #jumpscare-overlay { background-color: var(--flash-color); animation: flash 200ms ease-out; }
+        .jumpscare-active #jumpscare-content { opacity: 1; animation: zoom-blur 800ms cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        .jumpscare-active #jumpscare-buttons { opacity: 1; }
+        @keyframes flash { from { background-color: var(--flash-color); } to { background-color: #000; } }
+        @keyframes zoom-blur { 0% { transform: scale(0.7); filter: blur(20px); opacity: 0; } 20% { transform: scale(1.5); filter: blur(0); opacity: 1; } 100% { transform: scale(1.4); filter: blur(0); opacity: 1; } }
+        #debug-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 5px; font-family: monospace; z-index: 5; pointer-events: none; }
+        #mobile-controls { position: absolute; bottom: 20px; left: 20px; z-index: 5; width: 120px; height: 120px; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; }
+        .d-pad { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); user-select: none; }
+        #d-pad-up { grid-area: 1 / 2 / 2 / 3; } #d-pad-left { grid-area: 2 / 1 / 3 / 2; } #d-pad-right { grid-area: 2 / 3 / 3 / 4; } #d-pad-down { grid-area: 3 / 2 / 4 / 3; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="start-screen" class="overlay">
+            <h1>Labirin Maut</h1>
+            <p>Gunakan tombol panah (Arrow Keys) atau WASD untuk menggerakkan kotak biru. Labirin ini dibuat acak setiap saat!</p>
+            <label class="checkbox-container"><input type="checkbox" id="jumpscare-toggle" checked> Aktifkan Jumpscare</label>
+            <p class="warning">Peringatan: Opsi ini mengandung efek mengejutkan.</p>
+            <button id="start-button">Mulai Bermain</button>
+            <div style="margin-top: 30px; font-size: 0.8em; opacity: 0.7;">
+                <label><input type="checkbox" id="debug-toggle"> Tampilkan Info Debug</label><br>
+                <label><input type="checkbox" id="mobile-controls-toggle"> Tampilkan Kontrol Mobile</label>
+            </div>
+        </div>
+        <div id="lose-modal" class="overlay hidden"><h1>Kamu Kalah!</h1><p>Coba lagi!</p></div>
+        <div id="jumpscare-overlay" class="overlay hidden">
+            <div id="jumpscare-content">
+                <img id="jumpscare-image" src="ghost.jpg" alt="Jumpscare">
+            </div>
+            <div id="jumpscare-buttons" class="hidden">
+                <button id="replay-jumpscare-button">Main Lagi</button>
+                <button id="disable-jumpscare-button" style="background-color: #f44336;">Matikan Jumpscare</button>
+            </div>
+        </div>
+        <div id="victory-screen" class="overlay hidden"><h1>Kamu Menang!</h1><button id="replay-victory-button">Main Lagi</button></div>
+        <div id="debug-info" class="hidden"></div>
+        <div id="mobile-controls" class="hidden"></div>
+    </div>
+
+    <script>
+    window.addEventListener('load', init);
+
+    // --- Elemen DOM & Variabel Global ---
+    const canvas = document.getElementById('game-canvas'), ctx = canvas.getContext('2d');
+    const startScreen = document.getElementById('start-screen'), loseModal = document.getElementById('lose-modal');
+    const jumpscareOverlay = document.getElementById('jumpscare-overlay'), jumpscareButtons = document.getElementById('jumpscare-buttons');
+    const victoryScreen = document.getElementById('victory-screen'), debugInfo = document.getElementById('debug-info');
+    const mobileControls = document.getElementById('mobile-controls');
+    const startButton = document.getElementById('start-button'), replayJumpscareButton = document.getElementById('replay-jumpscare-button');
+    const disableJumpscareButton = document.getElementById('disable-jumpscare-button'), replayVictoryButton = document.getElementById('replay-victory-button');
+    const jumpscareToggle = document.getElementById('jumpscare-toggle'), debugToggle = document.getElementById('debug-toggle');
+    const mobileControlsToggle = document.getElementById('mobile-controls-toggle');
+
+    const TILE_SIZE = 40, PLAYER_SPEED = 160;
+    
+    let player = { x: 0, y: 0, w: TILE_SIZE * 0.6, h: TILE_SIZE * 0.6, vx: 0, vy: 0 };
+    let startPos = { x: 0, y: 0 }, finishPos = { x: 0, y: 0, w: TILE_SIZE, h: TILE_SIZE };
+    let walls = [], keys = {}, lastTime = 0, gameRunning = false, controlsEnabled = false;
+    let jumpscareEnabled = true, debugMode = false, mobileControlsEnabled = false;
+    let audioCtx;
+    let MAZE; // Deklarasikan MAZE di sini, akan diisi oleh generator
+
+    // --- Fungsi Utama Game ---
+
+    function init() {
+        // Buat labirin baru setiap kali inisialisasi
+        MAZE = generateMaze(15, 21); // Ukuran: 15 baris, 21 kolom
+        canvas.width = MAZE[0].length * TILE_SIZE;
+        canvas.height = MAZE.length * TILE_SIZE;
+        buildCollisionMap();
+        resetPlayer();
+        
+        // Setup event listeners (hanya sekali)
+        window.addEventListener('keydown', (e) => { if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+        startButton.addEventListener('click', startGame);
+        replayJumpscareButton.addEventListener('click', resetGame);
+        disableJumpscareButton.addEventListener('click', () => { jumpscareEnabled = false; resetGame(); });
+        replayVictoryButton.addEventListener('click', resetGame);
+        jumpscareToggle.addEventListener('change', (e) => jumpscareEnabled = e.target.checked);
+        debugToggle.addEventListener('change', (e) => { debugMode = e.target.checked; debugInfo.classList.toggle('hidden', !debugMode); });
+        mobileControlsToggle.addEventListener('change', (e) => { mobileControlsEnabled = e.target.checked; mobileControls.classList.toggle('hidden', !mobileControlsEnabled); });
+        setupMobileControls();
+        
+        draw(); // Gambar kondisi awal
+    }
+
+    function startGame() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        startScreen.classList.add('hidden');
+        gameRunning = true; controlsEnabled = true;
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop(timestamp) {
+        if (!gameRunning) return;
+        const dt = (timestamp - lastTime) / 1000;
+        lastTime = timestamp;
+        update(dt);
+        draw();
+        if (debugMode) debugInfo.textContent = `FPS: ${(1/dt).toFixed(0)}
+Pos: ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`;
+        requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+        if (!controlsEnabled) { player.vx = 0; player.vy = 0; return; }
+        player.vx = 0; player.vy = 0;
+        if (keys['arrowleft'] || keys['a']) player.vx = -PLAYER_SPEED;
+        if (keys['arrowright'] || keys['d']) player.vx = PLAYER_SPEED;
+        if (keys['arrowup'] || keys['w']) player.vy = -PLAYER_SPEED;
+        if (keys['arrowdown'] || keys['s']) player.vy = PLAYER_SPEED;
+        if (player.vx !== 0 && player.vy !== 0) { const f = 1 / Math.sqrt(2); player.vx *= f; player.vy *= f; }
+        
+        const nextX = player.x + player.vx * dt, nextY = player.y + player.vy * dt;
+        if (!checkWallCollision({ x: nextX, y: player.y, w: player.w, h: player.h })) player.x = nextX;
+        if (!checkWallCollision({ x: player.x, y: nextY, w: player.w, h: player.h })) player.y = nextY;
+        
+        if (checkFinishCollision()) handleFinish();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#4caf50'; ctx.fillRect(startPos.x, startPos.y, TILE_SIZE, TILE_SIZE);
+        ctx.fillStyle = '#f44336'; ctx.fillRect(finishPos.x, finishPos.y, TILE_SIZE, TILE_SIZE);
+        ctx.fillStyle = '#333';
+        walls.forEach(wall => { ctx.fillRect(wall.x, wall.y, wall.w, wall.h); if (debugMode) { ctx.strokeStyle = '#ff00ff'; ctx.strokeRect(wall.x, wall.y, wall.w, wall.h); } });
+        ctx.fillStyle = '#00aaff'; ctx.fillRect(player.x, player.y, player.w, player.h);
+        if (debugMode) { ctx.strokeStyle = '#00ff00'; ctx.strokeRect(player.x, player.y, player.w, player.h); }
+    }
+
+    // --- Fungsi Helper & Logika ---
+
+    function buildCollisionMap() {
+        walls = [];
+        for (let r = 0; r < MAZE.length; r++) for (let c = 0; c < MAZE[r].length; c++) {
+            const x = c * TILE_SIZE, y = r * TILE_SIZE;
+            if (MAZE[r][c] === 1) walls.push({ x, y, w: TILE_SIZE, h: TILE_SIZE });
+            else if (MAZE[r][c] === 2) finishPos = { x, y, w: TILE_SIZE, h: TILE_SIZE };
+            else if (MAZE[r][c] === 3) startPos = { x, y };
+        }
+    }
+
+    function checkWallCollision(rect) { for (const wall of walls) if (rect.x < wall.x + wall.w && rect.x + rect.w > wall.x && rect.y < wall.y + wall.h && rect.y + rect.h > wall.y) { showLose(); return true; } return false; }
+
+    function checkFinishCollision() { return player.x < finishPos.x + finishPos.w && player.x + player.w > finishPos.x && player.y < finishPos.y + finishPos.h && player.y + player.h > finishPos.y; }
+
+    function resetPlayer() { player.x = startPos.x + (TILE_SIZE - player.w) / 2; player.y = startPos.y + (TILE_SIZE - player.h) / 2; player.vx = 0; player.vy = 0; }
+
+    function showLose() { if (!controlsEnabled) return; controlsEnabled = false; loseModal.classList.remove('hidden'); setTimeout(() => { loseModal.classList.add('hidden'); resetPlayer(); controlsEnabled = true; }, 800); }
+
+    function handleFinish() { gameRunning = false; controlsEnabled = false; if (jumpscareEnabled) showJumpscare(); else showVictoryAnimation(); }
+
+    function showJumpscare() {
+        jumpscareOverlay.classList.remove('hidden');
+        document.body.classList.add('jumpscare-active');
+        playJumpscareSound();
+        setTimeout(() => jumpscareButtons.classList.remove('hidden'), 800);
+    }
+    
+    function showVictoryAnimation() { victoryScreen.classList.remove('hidden'); }
+
+    function playJumpscareSound() {
+        const audio = new Audio('Jumpscare Sound.mp3');
+        audio.play().catch(e => console.error("Gagal memutar audio:", e));
+    }
+
+    function resetGame() {
+        jumpscareOverlay.classList.add('hidden');
+        jumpscareButtons.classList.add('hidden');
+        victoryScreen.classList.add('hidden');
+        loseModal.classList.add('hidden');
+        document.body.classList.remove('jumpscare-active');
+        startScreen.classList.remove('hidden');
+        gameRunning = false; controlsEnabled = false;
+        init(); // Panggil init() untuk membuat labirin baru dan mereset semuanya
+    }
+    
+    function setupMobileControls() {
+        const dPads = {'d-pad-up':{key:'w'},'d-pad-down':{key:'s'},'d-pad-left':{key:'a'},'d-pad-right':{key:'d'}};for (const [id, { key }] of Object.entries(dPads)) {
+            const el = document.getElementById(id);
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; }, { passive: false });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
+            el.addEventListener('mousedown', (e) => { e.preventDefault(); keys[key] = true; });
+            el.addEventListener('mouseup', (e) => { e.preventDefault(); keys[key] = false; });
+            el.addEventListener('mouseleave', (e) => { keys[key] = false; });
+        }
+    }
+
+    // --- Generator Labirin ---
+    function generateMaze(rows, cols) {
+        rows = rows % 2 === 0 ? rows + 1 : rows;
+        cols = cols % 2 === 0 ? cols + 1 : cols;
+        let maze = Array(rows).fill(0).map(() => Array(cols).fill(1));
+        function carve(cx, cy) {
+            maze[cy][cx] = 0;
+            const directions = [[-2, 0], [2, 0], [0, -2], [0, 2]];
+            directions.sort(() => Math.random() - 0.5);
+            for (let [dx, dy] of directions) {
+                const nx = cx + dx, ny = cy + dy;
+                if (ny > 0 && ny < rows - 1 && nx > 0 && nx < cols - 1 && maze[ny][nx] === 1) {
+                    maze[ny - dy / 2][nx - dx / 2] = 0;
+                    carve(nx, ny);
+                }
+            }
+        }
+        carve(1, 1);
+        maze[1][1] = 3; // Start
+        maze[rows - 2][cols - 2] = 2; // Finish
+        return maze;
+    }
+    </script>
+</body>
+</html>
