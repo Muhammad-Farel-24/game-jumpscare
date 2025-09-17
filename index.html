@@ -24,17 +24,9 @@
         button:hover { transform: scale(1.05); }
         .checkbox-container { margin: 20px 0; display: flex; align-items: center; cursor: pointer; }
         .warning { color: #ffcc00; font-size: 0.9em; max-width: 400px; }
-                #jumpscare-overlay { 
-            position: fixed; /* Mengambil alih posisi dari .overlay */
-            top: 0;
-            left: 0;
-            width: 100vw; /* Lebar penuh viewport */
-            height: 100vh; /* Tinggi penuh viewport */
-            background-color: transparent; 
-            z-index: 100; 
-        }
+        #jumpscare-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: transparent; z-index: 100; }
         #jumpscare-content { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; opacity: 0; }
-        #jumpscare-image { width: 100%; height: 100%; object-fit: cover; transform: scale(0.5); }
+        #jumpscare-image { width: 100%; height: 100%; object-fit: cover; }
         #jumpscare-buttons { position: absolute; bottom: 50px; opacity: 0; transition: opacity 1s 2s; }
         .jumpscare-active #jumpscare-overlay { background-color: var(--flash-color); animation: flash 200ms ease-out; }
         .jumpscare-active #jumpscare-content { opacity: 1; animation: zoom-blur 800ms cubic-bezier(0.25, 1, 0.5, 1) forwards; }
@@ -57,8 +49,7 @@
             <p class="warning">Peringatan: Opsi ini mengandung efek mengejutkan.</p>
             <button id="start-button">Mulai Bermain</button>
             <div style="margin-top: 30px; font-size: 0.8em; opacity: 0.7;">
-                <label><input type="checkbox" id="debug-toggle"> Tampilkan Info Debug</label><br>
-                <label><input type="checkbox" id="mobile-controls-toggle"> Tampilkan Kontrol Mobile</label>
+                <label><input type="checkbox" id="debug-toggle"> Tampilkan Info Debug</label>
             </div>
         </div>
         <div id="lose-modal" class="overlay hidden"><h1>Kamu Kalah!</h1><p>Coba lagi!</p></div>
@@ -73,8 +64,11 @@
         </div>
         <div id="victory-screen" class="overlay hidden"><h1>Kamu Menang!</h1><button id="replay-victory-button">Main Lagi</button></div>
         <div id="debug-info" class="hidden"></div>
-                        <div id="mobile-controls" class="">
-            <!-- Kontrol mobile sengaja ditampilkan -->
+        <div id="mobile-controls" class="">
+            <div id="d-pad-up" class="d-pad"></div>
+            <div id="d-pad-left" class="d-pad"></div>
+            <div id="d-pad-right" class="d-pad"></div>
+            <div id="d-pad-down" class="d-pad"></div>
         </div>
     </div>
 
@@ -90,28 +84,25 @@
     const startButton = document.getElementById('start-button'), replayJumpscareButton = document.getElementById('replay-jumpscare-button');
     const disableJumpscareButton = document.getElementById('disable-jumpscare-button'), replayVictoryButton = document.getElementById('replay-victory-button');
     const jumpscareToggle = document.getElementById('jumpscare-toggle'), debugToggle = document.getElementById('debug-toggle');
-    const mobileControlsToggle = document.getElementById('mobile-controls-toggle');
 
     const TILE_SIZE = 40, PLAYER_SPEED = 160;
     
     let player = { x: 0, y: 0, w: TILE_SIZE * 0.6, h: TILE_SIZE * 0.6, vx: 0, vy: 0 };
     let startPos = { x: 0, y: 0 }, finishPos = { x: 0, y: 0, w: TILE_SIZE, h: TILE_SIZE };
     let walls = [], keys = {}, lastTime = 0, gameRunning = false, controlsEnabled = false;
-    let jumpscareEnabled = true, debugMode = false, mobileControlsEnabled = false;
+    let jumpscareEnabled = true, debugMode = false;
     let audioCtx;
     let MAZE; // Deklarasikan MAZE di sini, akan diisi oleh generator
 
     // --- Fungsi Utama Game ---
 
     function init() {
-        // Buat labirin baru setiap kali inisialisasi
-        MAZE = generateMaze(15, 21); // Ukuran: 15 baris, 21 kolom
+        MAZE = generateMaze(15, 21);
         canvas.width = MAZE[0].length * TILE_SIZE;
         canvas.height = MAZE.length * TILE_SIZE;
         buildCollisionMap();
         resetPlayer();
         
-        // Setup event listeners (hanya sekali)
         window.addEventListener('keydown', (e) => { if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); keys[e.key.toLowerCase()] = true; });
         window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
         startButton.addEventListener('click', startGame);
@@ -120,10 +111,9 @@
         replayVictoryButton.addEventListener('click', resetGame);
         jumpscareToggle.addEventListener('change', (e) => jumpscareEnabled = e.target.checked);
         debugToggle.addEventListener('change', (e) => { debugMode = e.target.checked; debugInfo.classList.toggle('hidden', !debugMode); });
-        mobileControlsToggle.addEventListener('change', (e) => { mobileControlsEnabled = e.target.checked; mobileControls.classList.toggle('hidden', !mobileControlsEnabled); });
         setupMobileControls();
         
-        draw(); // Gambar kondisi awal
+        draw();
     }
 
     function startGame() {
@@ -171,8 +161,6 @@ Pos: ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`;
         if (debugMode) { ctx.strokeStyle = '#00ff00'; ctx.strokeRect(player.x, player.y, player.w, player.h); }
     }
 
-    // --- Fungsi Helper & Logika ---
-
     function buildCollisionMap() {
         walls = [];
         for (let r = 0; r < MAZE.length; r++) for (let c = 0; c < MAZE[r].length; c++) {
@@ -184,42 +172,18 @@ Pos: ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`;
     }
 
     function checkWallCollision(rect) { for (const wall of walls) if (rect.x < wall.x + wall.w && rect.x + rect.w > wall.x && rect.y < wall.y + wall.h && rect.y + rect.h > wall.y) { showLose(); return true; } return false; }
-
     function checkFinishCollision() { return player.x < finishPos.x + finishPos.w && player.x + player.w > finishPos.x && player.y < finishPos.y + finishPos.h && player.y + player.h > finishPos.y; }
-
     function resetPlayer() { player.x = startPos.x + (TILE_SIZE - player.w) / 2; player.y = startPos.y + (TILE_SIZE - player.h) / 2; player.vx = 0; player.vy = 0; }
-
     function showLose() { if (!controlsEnabled) return; controlsEnabled = false; loseModal.classList.remove('hidden'); setTimeout(() => { loseModal.classList.add('hidden'); resetPlayer(); controlsEnabled = true; }, 800); }
-
     function handleFinish() { gameRunning = false; controlsEnabled = false; if (jumpscareEnabled) showJumpscare(); else showVictoryAnimation(); }
-
-    function showJumpscare() {
-        jumpscareOverlay.classList.remove('hidden');
-        document.body.classList.add('jumpscare-active');
-        playJumpscareSound();
-        setTimeout(() => jumpscareButtons.classList.remove('hidden'), 800);
-    }
-    
+    function showJumpscare() { jumpscareOverlay.classList.remove('hidden'); document.body.classList.add('jumpscare-active'); playJumpscareSound(); setTimeout(() => jumpscareButtons.classList.remove('hidden'), 800); }
     function showVictoryAnimation() { victoryScreen.classList.remove('hidden'); }
-
-    function playJumpscareSound() {
-        const audio = new Audio('Jumpscare Sound.mp3');
-        audio.play().catch(e => console.error("Gagal memutar audio:", e));
-    }
-
-    function resetGame() {
-        jumpscareOverlay.classList.add('hidden');
-        jumpscareButtons.classList.add('hidden');
-        victoryScreen.classList.add('hidden');
-        loseModal.classList.add('hidden');
-        document.body.classList.remove('jumpscare-active');
-        startScreen.classList.remove('hidden');
-        gameRunning = false; controlsEnabled = false;
-        init(); // Panggil init() untuk membuat labirin baru dan mereset semuanya
-    }
+    function playJumpscareSound() { const audio = new Audio('Jumpscare Sound.mp3'); audio.play().catch(e => console.error("Gagal memutar audio:", e)); }
+    function resetGame() { jumpscareOverlay.classList.add('hidden'); jumpscareButtons.classList.add('hidden'); victoryScreen.classList.add('hidden'); loseModal.classList.add('hidden'); document.body.classList.remove('jumpscare-active'); startScreen.classList.remove('hidden'); gameRunning = false; controlsEnabled = false; init(); }
     
     function setupMobileControls() {
-        const dPads = {'d-pad-up':{key:'w'},'d-pad-down':{key:'s'},'d-pad-left':{key:'a'},'d-pad-right':{key:'d'}};for (const [id, { key }] of Object.entries(dPads)) {
+        const dPads = {'d-pad-up':{key:'w'},'d-pad-down':{key:'s'},'d-pad-left':{key:'a'},'d-pad-right':{key:'d'}}; 
+        for (const [id, { key }] of Object.entries(dPads)) {
             const el = document.getElementById(id);
             el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; }, { passive: false });
             el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
@@ -229,7 +193,6 @@ Pos: ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`;
         }
     }
 
-    // --- Generator Labirin ---
     function generateMaze(rows, cols) {
         rows = rows % 2 === 0 ? rows + 1 : rows;
         cols = cols % 2 === 0 ? cols + 1 : cols;
@@ -247,8 +210,8 @@ Pos: ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`;
             }
         }
         carve(1, 1);
-        maze[1][1] = 3; // Start
-        maze[rows - 2][cols - 2] = 2; // Finish
+        maze[1][1] = 3;
+        maze[rows - 2][cols - 2] = 2;
         return maze;
     }
     </script>
