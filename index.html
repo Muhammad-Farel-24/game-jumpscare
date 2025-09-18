@@ -26,7 +26,7 @@
         .warning { color: #ffcc00; font-size: 0.9em; max-width: 400px; }
         #jumpscare-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: transparent; z-index: 100; }
         #jumpscare-content { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; opacity: 0; }
-        #jumpscare-image { width: 100%; height: 100%; object-fit: cover; }
+        #jumpscare-image { width: 100%; height: 100%; object-fit: contain; }
         #jumpscare-buttons { position: absolute; bottom: 50px; opacity: 0; transition: opacity 1s 2s; }
         .jumpscare-active #jumpscare-overlay { background-color: var(--flash-color); animation: flash 200ms ease-out; }
         .jumpscare-active #jumpscare-content { opacity: 1; animation: zoom-blur 800ms cubic-bezier(0.25, 1, 0.5, 1) forwards; }
@@ -55,7 +55,7 @@
         <div id="lose-modal" class="overlay hidden"><h1>Kamu Kalah!</h1><p>Coba lagi!</p></div>
         <div id="jumpscare-overlay" class="overlay hidden">
             <div id="jumpscare-content">
-                <img id="jumpscare-image" src="ghost.jpg" alt="Jumpscare">
+                <img id="jumpscare-image" src="jumpscare.jpg" alt="Jumpscare">
             </div>
             <div id="jumpscare-buttons" class="hidden">
                 <button id="replay-jumpscare-button">Main Lagi</button>
@@ -84,6 +84,7 @@
     const startButton = document.getElementById('start-button'), replayJumpscareButton = document.getElementById('replay-jumpscare-button');
     const disableJumpscareButton = document.getElementById('disable-jumpscare-button'), replayVictoryButton = document.getElementById('replay-victory-button');
     const jumpscareToggle = document.getElementById('jumpscare-toggle'), debugToggle = document.getElementById('debug-toggle');
+    const jumpscareSound = new Audio('Jumpscare Sound.mp3');
 
     const TILE_SIZE = 40, PLAYER_SPEED = 160;
     
@@ -178,7 +179,10 @@ Pos: ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`;
     function handleFinish() { gameRunning = false; controlsEnabled = false; if (jumpscareEnabled) showJumpscare(); else showVictoryAnimation(); }
     function showJumpscare() { jumpscareOverlay.classList.remove('hidden'); document.body.classList.add('jumpscare-active'); playJumpscareSound(); setTimeout(() => jumpscareButtons.classList.remove('hidden'), 800); }
     function showVictoryAnimation() { victoryScreen.classList.remove('hidden'); }
-    function playJumpscareSound() { const audio = new Audio('Jumpscare Sound.mp3'); audio.play().catch(e => console.error("Gagal memutar audio:", e)); }
+    function playJumpscareSound() { 
+        jumpscareSound.currentTime = 0;
+        jumpscareSound.play().catch(e => console.error("Gagal memutar audio:", e)); 
+    }
     function resetGame() { jumpscareOverlay.classList.add('hidden'); jumpscareButtons.classList.add('hidden'); victoryScreen.classList.add('hidden'); loseModal.classList.add('hidden'); document.body.classList.remove('jumpscare-active'); startScreen.classList.remove('hidden'); gameRunning = false; controlsEnabled = false; init(); }
     
     function setupMobileControls() {
